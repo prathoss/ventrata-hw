@@ -1,0 +1,226 @@
+openapi: 3.0.3
+info:
+  title: HW
+  description: HW
+  version: 1.0.0
+paths:
+  /products:
+    get:
+      tags:
+        - Products
+      summary: List products
+      description: Update an existing pet by Id
+      operationId: listProducts
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid ID supplied
+        '404':
+          description: Pet not found
+        '422':
+          description: Validation exception
+  /products/{id}:
+    get:
+      tags:
+        - Products
+      summary: Get product detail
+      description: Get product detail by id
+      operationId: productDetail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID of product
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+  /availability:
+    post:
+      tags:
+        - Availability
+      summary: Filter availability
+      description: |
+        The API should be able to generate  ~1 year of availabilities: today + 365 days. You can return just an empty array for dates outside of this range.
+        
+        When the availability.vacancies drop to 0, the status will become SOLD_OUT and available flag will become false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/AvailabilityRequest"
+                - $ref: "#/components/schemas/AvailabilityRangeRequest"
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+  /bookings:
+    post:
+      tags:
+        - Booking
+      summary: Create booking
+      description: |
+        This endpoint will create a reservation. When a booking is created, the `availability.vacancies` has to be lowered by the amount of units provided in the body.
+        If the provided availability doesn’t have enough vacancies, the reservation creation cannot proceed. 
+        Reservation must have status `RESERVED` and there won’t be any tickets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingRequest"
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+  /bookings/{id}:
+    get:
+      tags:
+        - Booking
+      summary: Booking detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID of booking
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+  /bookings/{id}/confirm:
+    post:
+      tags:
+        - Booking
+      summary: Confirm booking
+      description: |
+        Confirmed Booking must have the status `CONFIRMED` and there have to be `tickets` generated.
+        It’s fine if the `ticket` is represented by a randomly generated string.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID of booking
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+components:
+  schemas:
+    Product:
+      description: Product represents a simple product in the system that can be booked.
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        capacity:
+          type: integer
+    Availability:
+      description: Availability represents whether is a product available on a certain day.
+      type: object
+      properties:
+        id:
+          type: string
+        localDate:
+          type: string
+          format: date-time
+          pattern: yyyy-MM-dd
+        status:
+          type: string
+          enum:
+            - AVAILABLE
+            - SOLD_OUT
+        vacancies:
+          type: integer
+        available:
+          type: boolean
+    AvailabilityRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+        localDate:
+          type: string
+          format: date-time
+          pattern: yyyy-MM-dd
+    AvailabilityRangeRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+        localDateStart:
+          type: string
+          format: date-time
+          pattern: yyyy-MM-dd
+        localDateEnd:
+          type: string
+          format: date-time
+          pattern: yyyy-MM-dd
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - RESERVED
+            - CONFIRMED
+        productId:
+          type: string
+        availabilityId:
+          type: string
+        units:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookingUnit"
+    BookingUnit:
+      type: object
+      properties:
+        id:
+          type: string
+        ticket:
+          description: when Booking is CONFIRMED, generate a ticket (some random string), otherwise null
+          type: string
+          nullable: true
+    BookingRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+        availabilityId:
+          type: string
+        units:
+          description: represents a number of customers on this Booking
+          type: integer
