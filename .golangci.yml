@@ -1,0 +1,7 @@
+# $schema: https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+linters:
+  enable:
+    - gofmt
+    - gosec
+    - bodyclose
+    - gocognit

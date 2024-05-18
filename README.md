@@ -8,3 +8,9 @@ Requirements:
 - [ ] Error handling
 - [ ] Deployment
 - [ ] Testing
+
+## Dependencies
+
+- Makefile
+- Docker
+- [golangci-lint](https://golangci-lint.run/welcome/install/)
