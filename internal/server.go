@@ -16,12 +16,14 @@ func NewServer(config Config) (*Server, error) {
 		return nil, err
 	}
 	return &Server{
-		db: pool,
+		db:     pool,
+		config: config,
 	}, nil
 }
 
 type Server struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	config Config
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -38,7 +40,7 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/v1/health", pkg.HttpHandler(s.handleHealth))
 
 	server := &http.Server{
-		Addr: ":8080",
+		Addr: s.config.ServerAddress,
 		Handler: pkg.CorrelationHandler(
 			pkg.LoggingHandler(
 				mux,
