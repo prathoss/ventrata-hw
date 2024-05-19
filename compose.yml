@@ -1,0 +1,38 @@
+name: ventrata-hw
+services:
+  postgres:
+    image: postgres:15-alpine3.17
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: localDb123
+    volumes:
+      - .docker/db/:/docker-entrypoint-initdb.d/
+    ports:
+      - "5432:5432"
+
+  migrations:
+    image: migrate/migrate
+    volumes:
+      - ./migrations:/migrations
+    command: [ "-path" ,"/migrations/", "-database", "postgres://ventrata_usr:ventrata123@postgres:5432/ventrata?sslmode=disable&search_path=ventrata", "up" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "/app/app health"]
+    ports:
+      - "8080:8080"
+    environment:
+      HW_DATABASE: "postgres://ventrata_usr:ventrata123@postgres:5432/ventrata?sslmode=disable&search_path=ventrata"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully

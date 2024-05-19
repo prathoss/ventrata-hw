@@ -14,3 +14,4 @@ Requirements:
 - Makefile
 - Docker
 - [golangci-lint](https://golangci-lint.run/welcome/install/)
+- [migrate](https://github.com/golang-migrate/migrate)
