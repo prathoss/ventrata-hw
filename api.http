@@ -37,3 +37,6 @@ Content-Type: application/json
   "localDateStart": "{{localDateStart}}",
   "localDateEnd": "{{localDateEnd}}"
 }
+
+### Open API
+GET {{uri}}/api/v1/open-api

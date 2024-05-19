@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 )
 
 const CapabilityPricing = "pricing"
+
+//go:embed openapi.yaml
+var openApi []byte
 
 func NewServer(config Config) (*Server, error) {
 	pool, err := pgxpool.New(context.Background(), config.DatabaseDSN)
@@ -192,6 +196,13 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/v1/bookings", pkg.HttpHandler(s.createBooking))
 	mux.Handle("GET /api/v1/bookings/{id}", pkg.HttpHandler(s.getBookingDetail))
 	mux.Handle("POST /api/v1/bookings/{id}/confirm", pkg.HttpHandler(s.confirmBooking))
+
+	mux.HandleFunc("GET /api/v1/open-api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/yml")
+		if _, err := w.Write(openApi); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write open api", pkg.Err(err))
+		}
+	})
 
 	server := &http.Server{
 		Addr: s.config.ServerAddress,
