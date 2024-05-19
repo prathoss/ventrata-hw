@@ -1,0 +1,2 @@
+### Health
+GET {{uri}}/api/v1/health
