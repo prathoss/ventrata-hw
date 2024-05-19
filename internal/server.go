@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -11,16 +12,18 @@ import (
 	"github.com/prathoss/hw/pkg"
 )
 
+const CapabilityPricing = "pricing"
+
 func NewServer(config Config) (*Server, error) {
 	pool, err := pgxpool.New(context.Background(), config.DatabaseDSN)
 	if err != nil {
 		return nil, err
 	}
-	productStore := NewProductRepository(pool)
 	return &Server{
 		db:           pool,
 		config:       config,
-		productStore: productStore,
+		productStore: NewProductRepository(pool),
+		pricingStore: NewPricingRepository(pool),
 	}, nil
 }
 
@@ -28,6 +31,7 @@ type Server struct {
 	db           *pgxpool.Pool
 	config       Config
 	productStore ProductStorer
+	pricingStore PricingStorer
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -49,8 +53,34 @@ func (s *Server) listProducts(_ http.ResponseWriter, r *http.Request) (any, erro
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	// TODO: handle capability
-	return s.productStore.ListProducts(r.Context())
+	products, err := s.productStore.ListProducts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	if capability == CapabilityPricing {
+		productIDs := make([]uuid.UUID, 0, len(products))
+		for _, product := range products {
+			productIDs = append(productIDs, product.ID)
+		}
+		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, "EUR")
+		if err != nil {
+			return nil, err
+		}
+		pricedProducts := make([]PricedProduct, 0, len(products))
+		for _, product := range products {
+			pricing, ok := pricing[product.ID]
+			if !ok {
+				return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for product %s", product.ID))
+			}
+			pricedProducts = append(pricedProducts, PricedProduct{
+				Product: product,
+				Pricing: pricing,
+			})
+		}
+		return pricedProducts, nil
+	}
+	return products, nil
 }
 
 func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -68,8 +98,27 @@ func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, 
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	// TODO: handle capability
-	return s.productStore.GetProduct(r.Context(), id)
+	product, err := s.productStore.GetProduct(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	if capability == CapabilityPricing {
+		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), []uuid.UUID{product.ID}, "EUR")
+		if err != nil {
+			return nil, err
+		}
+		p, ok := pricing[product.ID]
+		if !ok {
+			return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for product %s", product.ID))
+		}
+		pricedProduct := PricedProduct{
+			Product: product,
+			Pricing: p,
+		}
+		return pricedProduct, nil
+	}
+	return product, nil
 }
 
 func (s *Server) listAvailability(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -93,11 +142,11 @@ func (s *Server) confirmBooking(w http.ResponseWriter, r *http.Request) (any, er
 }
 
 func validateCapability(capability string) []pkg.InvalidParam {
-	if capability != "" && capability != "pricing" {
+	if capability != "" && capability != CapabilityPricing {
 		return []pkg.InvalidParam{
 			{
 				Name:   "Capability",
-				Reason: "Capability header contains unexpected value, allowed values are: pricing",
+				Reason: fmt.Sprintf("Capability header contains unexpected value, allowed values are: %s", CapabilityPricing),
 			},
 		}
 	}
@@ -134,9 +183,12 @@ func (s *Server) Run() error {
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /api/v1/health", pkg.HttpHandler(s.handleHealth))
+
 	mux.Handle("GET /api/v1/products", pkg.HttpHandler(s.listProducts))
 	mux.Handle("GET /api/v1/products/{id}", pkg.HttpHandler(s.getProductDetail))
+
 	mux.Handle("POST /api/v1/availability", pkg.HttpHandler(s.listAvailability))
+
 	mux.Handle("POST /api/v1/bookings", pkg.HttpHandler(s.createBooking))
 	mux.Handle("GET /api/v1/bookings/{id}", pkg.HttpHandler(s.getBookingDetail))
 	mux.Handle("POST /api/v1/bookings/{id}/confirm", pkg.HttpHandler(s.confirmBooking))

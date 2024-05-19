@@ -9,3 +9,31 @@ GET {{uri}}/api/v1/products
     request.variables.set("ID", "9D51D042-96B7-446B-B152-97D451D33933");
 %}
 GET {{uri}}/api/v1/products/{{ID}}
+
+### List availability
+< {%
+    request.variables.set("productID", "9D51D042-96B7-446B-B152-97D451D33933");
+    request.variables.set("localDate", "2024-05-20")
+%}
+POST {{uri}}/api/v1/availability
+Content-Type: application/json
+
+{
+  "productId": "{{productID}}",
+  "localDate": "{{localDate}}"
+}
+
+### List availability range
+< {%
+    request.variables.set("productID", "9D51D042-96B7-446B-B152-97D451D33933");
+    request.variables.set("localDateStart", "2024-05-20")
+    request.variables.set("localDateEnd", "2024-06-20")
+%}
+POST {{uri}}/api/v1/availability
+Content-Type: application/json
+
+{
+  "productId": "{{productID}}",
+  "localDateStart": "{{localDateStart}}",
+  "localDateEnd": "{{localDateEnd}}"
+}

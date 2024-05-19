@@ -177,3 +177,31 @@ func (i *InternalServerError) WriteProblem(ctx context.Context, w http.ResponseW
 	}
 	return json.NewEncoder(w).Encode(detail)
 }
+
+var _ error = &NotFoundError{}
+var _ HttpProblemWriter = &NotFoundError{}
+
+func NewNotFoundError(message string) *NotFoundError {
+	return &NotFoundError{
+		message: message,
+	}
+}
+
+type NotFoundError struct {
+	message string
+}
+
+func (n *NotFoundError) Error() string {
+	return n.message
+}
+
+func (n *NotFoundError) WriteProblem(ctx context.Context, w http.ResponseWriter) error {
+	w.WriteHeader(http.StatusNotFound)
+	w.Header().Set("Content-Type", "application/problem+json")
+	detail := ProblemDetail{
+		Status: http.StatusNotFound,
+		Type:   "https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.4",
+		Title:  n.message,
+	}
+	return json.NewEncoder(w).Encode(detail)
+}

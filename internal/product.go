@@ -10,10 +10,15 @@ import (
 )
 
 type Product struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 	// Capacity represents max number of vacancies per 1 day (availability)
 	Capacity int `json:"capacity"`
+}
+
+type PricedProduct struct {
+	Product
+	Pricing
 }
 
 type ProductStorer interface {
@@ -34,7 +39,7 @@ type ProductRepository struct {
 }
 
 func (p *ProductRepository) GetProduct(ctx context.Context, id uuid.UUID) (Product, error) {
-	rows, err := p.db.Query(ctx, "SELECT * FROM ventrata.products WHERE id = $1", id)
+	rows, err := p.db.Query(ctx, "SELECT id, name, capacity FROM ventrata.products WHERE id = $1", id)
 	if err != nil {
 		return Product{}, fmt.Errorf("querying product by id failed: %w", err)
 	}
@@ -49,7 +54,7 @@ func (p *ProductRepository) GetProduct(ctx context.Context, id uuid.UUID) (Produ
 }
 
 func (p *ProductRepository) ListProducts(ctx context.Context) ([]Product, error) {
-	rows, err := p.db.Query(ctx, "SELECT * FROM ventrata.products")
+	rows, err := p.db.Query(ctx, "SELECT id, name, capacity FROM ventrata.products")
 	if err != nil {
 		return nil, fmt.Errorf("querying products failed: %w", err)
 	}

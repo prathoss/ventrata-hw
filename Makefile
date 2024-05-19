@@ -10,4 +10,4 @@ create-migration:
 
 .PHONY: apply-migrations
 apply-migrations:
-	migrate -database ${DSN} -path migrations up
+	migrate -database "${DSN}" -path migrations up
