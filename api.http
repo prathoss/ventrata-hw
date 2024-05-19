@@ -1,2 +1,11 @@
 ### Health
 GET {{uri}}/api/v1/health
+
+### List products
+GET {{uri}}/api/v1/products
+
+### Get Product by ID
+< {%
+    request.variables.set("ID", "9D51D042-96B7-446B-B152-97D451D33933");
+%}
+GET {{uri}}/api/v1/products/{{ID}}

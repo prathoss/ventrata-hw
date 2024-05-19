@@ -123,6 +123,10 @@ func (s *ServiceUnavailableError) Error() string {
 var _ error = &BadRequestError{}
 var _ HttpProblemWriter = &BadRequestError{}
 
+func NewBadRequestError(invalidParams ...InvalidParam) *BadRequestError {
+	return &BadRequestError{invalidParams: invalidParams}
+}
+
 type BadRequestError struct {
 	invalidParams []InvalidParam
 }

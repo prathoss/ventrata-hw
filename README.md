@@ -5,7 +5,7 @@ from Ventrata interview process.
 
 Requirements:
 - [ ] API implementation
-- [ ] Error handling
+- [x] Error handling
 - [ ] Deployment
 - [ ] Testing
 
