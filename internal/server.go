@@ -32,6 +32,7 @@ func NewServer(config Config) (*Server, error) {
 		productStore:      NewProductRepository(pool),
 		pricingStore:      NewPricingRepository(pool),
 		availabilityStore: NewAvailabilityRepository(pool),
+		bookingStore:      NewBookingRepository(pool),
 	}, nil
 }
 
@@ -41,6 +42,7 @@ type Server struct {
 	productStore      ProductStorer
 	pricingStore      PricingStorer
 	availabilityStore AvailabilityStorer
+	bookingStore      BookingStorer
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -68,26 +70,7 @@ func (s *Server) listProducts(_ http.ResponseWriter, r *http.Request) (any, erro
 	}
 
 	if capability == CapabilityPricing {
-		productIDs := make([]uuid.UUID, 0, len(products))
-		for _, product := range products {
-			productIDs = append(productIDs, product.ID)
-		}
-		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, getCurrency())
-		if err != nil {
-			return nil, err
-		}
-		pricedProducts := make([]PricedProduct, 0, len(products))
-		for _, product := range products {
-			pricing, ok := pricing[product.ID]
-			if !ok {
-				return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for product %s", product.ID))
-			}
-			pricedProducts = append(pricedProducts, PricedProduct{
-				Product: product,
-				Pricing: pricing,
-			})
-		}
-		return pricedProducts, nil
+		return s.pricingStore.GetPricedProducts(r.Context(), products, getCurrency())
 	}
 	return products, nil
 }
@@ -113,19 +96,11 @@ func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, 
 	}
 
 	if capability == CapabilityPricing {
-		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), []uuid.UUID{product.ID}, getCurrency())
+		pricedProducts, err := s.pricingStore.GetPricedProducts(r.Context(), []Product{product}, getCurrency())
 		if err != nil {
 			return nil, err
 		}
-		p, ok := pricing[product.ID]
-		if !ok {
-			return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for product %s", product.ID))
-		}
-		pricedProduct := PricedProduct{
-			Product: product,
-			Pricing: p,
-		}
-		return pricedProduct, nil
+		return pricedProducts[0], nil
 	}
 	return product, nil
 }
@@ -178,48 +153,67 @@ func (s *Server) listAvailability(_ http.ResponseWriter, r *http.Request) (any, 
 	}
 
 	if capability == CapabilityPricing {
-		productIDsMap := map[uuid.UUID]struct{}{}
-		for _, availability := range availabilities {
-			productIDsMap[availability.ProductID] = struct{}{}
-		}
-		productIDs := make([]uuid.UUID, 0, len(productIDsMap))
-		for productID := range productIDsMap {
-			productIDs = append(productIDs, productID)
-		}
-		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, getCurrency())
-		if err != nil {
-			return nil, err
-		}
-		pricedAvailabilities := make([]PricedAvailability, 0, len(availabilities))
-		for _, availability := range availabilities {
-			pricing, ok := pricing[availability.ProductID]
-			if !ok {
-				return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for availability %s", availability.ID))
-			}
-			pricedAvailabilities = append(pricedAvailabilities, PricedAvailability{
-				Availability: availability,
-				Pricing:      pricing,
-			})
-		}
-		return pricedAvailabilities, nil
+		return s.pricingStore.GetPricedAvailabilities(r.Context(), availabilities, getCurrency())
 	}
 
 	return availabilities, nil
 }
 
-func (s *Server) createBooking(w http.ResponseWriter, r *http.Request) (any, error) {
-	// TODO: implement
-	panic("not implemented")
+func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, error) {
+	var bookingRequest BookingRequest
+	if err := json.NewDecoder(r.Body).Decode(&bookingRequest); err != nil {
+		return nil, pkg.NewBadRequestError(pkg.InvalidParam{
+			Name:   "Body",
+			Reason: err.Error(),
+		})
+	}
+
+	availability, err := s.availabilityStore.GetAvailabilityByID(r.Context(), bookingRequest.AvailabilityID)
+	if err != nil {
+		return nil, err
+	}
+	return s.bookingStore.CreateBooking(r.Context(), availability, bookingRequest.Units)
 }
 
-func (s *Server) getBookingDetail(w http.ResponseWriter, r *http.Request) (any, error) {
-	// TODO: implement
-	panic("not implemented")
+func (s *Server) getBookingDetail(_ http.ResponseWriter, r *http.Request) (any, error) {
+	invalidParams := make([]pkg.InvalidParam, 0, 10)
+
+	capability := getCapabilityHeader(r)
+	validationErrors := validateCapability(capability)
+	invalidParams = append(invalidParams, validationErrors...)
+
+	idStr := r.PathValue("id")
+	id, validationErrors := validateID(idStr)
+	invalidParams = append(invalidParams, validationErrors...)
+
+	if len(invalidParams) > 0 {
+		return nil, pkg.NewBadRequestError(invalidParams...)
+	}
+
+	booking, err := s.bookingStore.GetBooking(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	if capability == CapabilityPricing {
+		bookings, err := s.pricingStore.GetPricedBookings(r.Context(), []Booking{booking}, getCurrency())
+		if err != nil {
+			return nil, err
+		}
+		return bookings[0], nil
+	}
+
+	return booking, nil
 }
 
-func (s *Server) confirmBooking(w http.ResponseWriter, r *http.Request) (any, error) {
-	// TODO: implement
-	panic("not implemented")
+func (s *Server) confirmBooking(_ http.ResponseWriter, r *http.Request) (any, error) {
+	idStr := r.PathValue("id")
+	id, validationErrors := validateID(idStr)
+	if len(validationErrors) > 0 {
+		return nil, pkg.NewBadRequestError(validationErrors...)
+	}
+
+	return s.bookingStore.ConfirmBooking(r.Context(), id)
 }
 
 func getCurrency() string {
@@ -278,6 +272,11 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/v1/bookings/{id}", pkg.HttpHandler(s.getBookingDetail))
 	mux.Handle("POST /api/v1/bookings/{id}/confirm", pkg.HttpHandler(s.confirmBooking))
 
+	mux.HandleFunc("POST /dev/v1/availability", func(w http.ResponseWriter, r *http.Request) {
+		s.CreateAvailabilities()
+		w.WriteHeader(http.StatusCreated)
+	})
+
 	mux.HandleFunc("GET /api/v1/open-api", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/yml")
 		if _, err := w.Write(openApi); err != nil {
@@ -299,6 +298,7 @@ func (s *Server) Run() error {
 		ErrorLog:          slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
 	}
 
+	// everyday at midnight create additional availabilities so that at least a year of availabilities data is ready
 	c := cron.New()
 	_, err := c.AddFunc("@daily", s.CreateAvailabilities)
 	if err != nil {

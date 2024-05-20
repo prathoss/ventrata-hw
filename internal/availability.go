@@ -32,14 +32,9 @@ type AvailabilityRangeRequest struct {
 	LocalDateEnd   JSONTime  `json:"localDateEnd"`
 }
 
-type PricedAvailability struct {
-	Availability
-	Pricing
-}
-
 const (
-	StatusAvailable = "AVAILABLE"
-	StatusSoldOut   = "SOLD_OUT"
+	AvailabilityStatusAvailable = "AVAILABLE"
+	AvailabilityStatusSoldOut   = "SOLD_OUT"
 )
 
 type AvailabilityStorer interface {
@@ -62,12 +57,22 @@ type AvailabilityRepository struct {
 	db *pgxpool.Pool
 }
 
-func (a *AvailabilityRepository) GetLatestAvailability(ctx context.Context, productID uuid.UUID) (*Availability, error) {
-	rows, err := a.db.Query(ctx, `SELECT a.id, a.product_id, a.date, p.capacity, (SELECT count(*) FROM ventrata.bookings b WHERE b.availability_id = a.id) AS booked
+const baseAvailabilityQuery = `SELECT a.id, a.product_id, a.date, p.capacity, (
+		SELECT count(*)
+		FROM ventrata.bookings b
+		JOIN ventrata.tickets t ON b.id = t.booking_id
+		WHERE b.availability_id = a.id
+	) AS booked
 FROM ventrata.availability a
-JOIN ventrata.products p ON p.id = a.product_id
-WHERE a.product_id = $1 AND
-	date = (SELECT max(date) FROM ventrata.availability WHERE product_id = $1 GROUP BY product_id)`,
+JOIN ventrata.products p ON p.id = a.product_id`
+
+func (a *AvailabilityRepository) GetLatestAvailability(ctx context.Context, productID uuid.UUID) (*Availability, error) {
+	rows, err := a.db.Query(
+		ctx,
+		fmt.Sprintf(
+			"%s WHERE a.product_id = $1 AND date = (SELECT max(date) FROM ventrata.availability WHERE product_id = $1 GROUP BY product_id)",
+			baseAvailabilityQuery,
+		),
 		productID,
 	)
 	if err != nil {
@@ -100,10 +105,14 @@ func (a *AvailabilityRepository) InsertAvailabilities(ctx context.Context, avail
 }
 
 func (a *AvailabilityRepository) GetAvailabilityByID(ctx context.Context, id uuid.UUID) (Availability, error) {
-	rows, err := a.db.Query(ctx, `SELECT a.id, a.product_id, a.date, p.capacity, (SELECT count(*) FROM ventrata.bookings b WHERE b.availability_id = a.id) AS booked
-FROM ventrata.availability a
-JOIN ventrata.products p ON p.id = a.product_id
-WHERE a.id = $1`, id)
+	rows, err := a.db.Query(
+		ctx,
+		fmt.Sprintf(
+			"%s WHERE a.id = $1",
+			baseAvailabilityQuery,
+		),
+		id,
+	)
 	if err != nil {
 		return Availability{}, fmt.Errorf("querying availability by id failed: %w", err)
 	}
@@ -122,10 +131,10 @@ WHERE a.id = $1`, id)
 func (a *AvailabilityRepository) GetAvailability(ctx context.Context, productID uuid.UUID, day time.Time) ([]Availability, error) {
 	rows, err := a.db.Query(
 		ctx,
-		`SELECT a.id, a.product_id, a.date, p.capacity, (SELECT count(*) FROM ventrata.bookings b WHERE b.availability_id = a.id) AS booked
-FROM ventrata.availability a
-JOIN ventrata.products p ON p.id = a.product_id
-WHERE a.product_id = $1 AND a.date = $2`,
+		fmt.Sprintf(
+			"%s WHERE a.product_id = $1 AND a.date = $2",
+			baseAvailabilityQuery,
+		),
 		productID,
 		day,
 	)
@@ -140,10 +149,10 @@ WHERE a.product_id = $1 AND a.date = $2`,
 func (a *AvailabilityRepository) GetAvailabilityTo(ctx context.Context, productID uuid.UUID, from time.Time, to time.Time) ([]Availability, error) {
 	rows, err := a.db.Query(
 		ctx,
-		`SELECT a.id, a.product_id, a.date, p.capacity, (SELECT count(*) FROM ventrata.bookings b WHERE b.availability_id = a.id) AS booked
-FROM ventrata.availability a
-JOIN ventrata.products p ON p.id = a.product_id
-WHERE a.product_id = $1 AND $2 <= a.date AND a.date <= $3`,
+		fmt.Sprintf(
+			"%s WHERE a.product_id = $1 AND $2 <= a.date AND a.date <= $3",
+			baseAvailabilityQuery,
+		),
 		productID,
 		from,
 		to,
@@ -175,10 +184,10 @@ func (a *AvailabilityRepository) scanAvailability(rows pgx.Rows) ([]Availability
 			Vacancies: vacancies,
 		}
 		if vacancies > 0 {
-			a.Status = StatusAvailable
+			a.Status = AvailabilityStatusAvailable
 			a.Available = true
 		} else {
-			a.Status = StatusSoldOut
+			a.Status = AvailabilityStatusSoldOut
 			a.Available = false
 		}
 

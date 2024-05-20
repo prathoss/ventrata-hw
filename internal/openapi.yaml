@@ -4,7 +4,7 @@ info:
   description: HW
   version: 1.0.0
 paths:
-  /products:
+  /api/v1/products:
     get:
       tags:
         - Products
@@ -29,7 +29,7 @@ paths:
                       allOf:
                         - $ref: "#/components/schemas/Product"
                         - $ref: "#/components/schemas/PricingCapability"
-  /products/{id}:
+  /api/v1/products/{id}:
     get:
       tags:
         - Products
@@ -58,7 +58,7 @@ paths:
                       - $ref: "#/components/schemas/PricingCapability"
         '400':
           $ref: "#/components/responses/ValidationError"
-  /availability:
+  /api/v1/availability:
     post:
       tags:
         - Availability
@@ -91,7 +91,7 @@ paths:
                       - $ref: "#/components/schemas/PricingCapability"
         '400':
           $ref: "#/components/responses/ValidationError"
-  /bookings:
+  /api/v1/bookings:
     post:
       tags:
         - Booking
@@ -120,7 +120,7 @@ paths:
                       - $ref: "#/components/schemas/PricingCapability"
         '400':
           $ref: "#/components/responses/ValidationError"
-  /bookings/{id}:
+  /api/v1/bookings/{id}:
     get:
       tags:
         - Booking
@@ -147,7 +147,7 @@ paths:
                       - $ref: "#/components/schemas/PricingCapability"
         '400':
           $ref: "#/components/responses/ValidationError"
-  /bookings/{id}/confirm:
+  /api/v1/bookings/{id}/confirm:
     post:
       tags:
         - Booking

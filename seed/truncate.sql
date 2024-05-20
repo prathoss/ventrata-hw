@@ -1,0 +1,1 @@
+TRUNCATE ventrata.products CASCADE;

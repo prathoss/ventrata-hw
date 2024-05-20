@@ -1,6 +1,12 @@
 ### Health
 GET {{uri}}/api/v1/health
 
+### Open API
+GET {{uri}}/api/v1/open-api
+
+### Create availabilities
+POST {{uri}}/dev/v1/availability
+
 ### List products
 GET {{uri}}/api/v1/products
 Capability: pricing
@@ -42,5 +48,29 @@ Capability: pricing
   "localDateEnd": "{{localDateEnd}}"
 }
 
-### Open API
-GET {{uri}}/api/v1/open-api
+### Create booking
+< {%
+    request.variables.set("productID", "9D51D042-96B7-446B-B152-97D451D33933");
+    request.variables.set("availabilityID", "63c0b911-25d8-49d8-b10e-280c4155c63c")
+%}
+POST {{uri}}/api/v1/bookings
+Content-Type: application/json
+
+{
+    "productId": "{{productID}}",
+    "availabilityId": "{{availabilityID}}",
+    "units": 50
+}
+
+### Get booking
+< {%
+    request.variables.set("bookingID", "aeaf5651-46dc-4874-8f6b-5e7bd924a03d");
+%}
+GET {{uri}}/api/v1/bookings/{{bookingID}}
+Capability: pricing
+
+### Confirm booking
+< {%
+    request.variables.set("bookingID", "aeaf5651-46dc-4874-8f6b-5e7bd924a03d");
+%}
+POST {{uri}}/api/v1/bookings/{{bookingID}}/confirm

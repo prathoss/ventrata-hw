@@ -16,11 +16,6 @@ type Product struct {
 	Capacity int `json:"capacity"`
 }
 
-type PricedProduct struct {
-	Product
-	Pricing
-}
-
 type ProductStorer interface {
 	GetProduct(ctx context.Context, id uuid.UUID) (Product, error)
 	ListProducts(ctx context.Context) ([]Product, error)
