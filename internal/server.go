@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ func NewServer(config Config) (*Server, error) {
 		pricingProcessor:      NewPricingRepository(pool),
 		availabilityProcessor: NewAvailabilityRepository(pool),
 		bookingProcessor:      NewBookingRepository(pool),
+		createBookingMu:       sync.Mutex{},
 	}, nil
 }
 
@@ -43,6 +45,7 @@ type Server struct {
 	pricingProcessor      PricingProcessor
 	availabilityProcessor AvailabilityProcessor
 	bookingProcessor      BookingProcessor
+	createBookingMu       sync.Mutex
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -178,6 +181,12 @@ func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, err
 	if len(invalidParams) > 0 {
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
+
+	// this is probably fine for this homework, for real application more robust solution would have to be implemented
+	s.createBookingMu.Lock()
+	defer func() {
+		s.createBookingMu.Unlock()
+	}()
 
 	availability, err := s.availabilityProcessor.GetAvailabilityByID(r.Context(), bookingRequest.AvailabilityID)
 	if err != nil {

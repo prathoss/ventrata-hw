@@ -60,7 +60,6 @@ type BookingRepository struct {
 }
 
 func (b *BookingRepository) CreateBooking(ctx context.Context, availability Availability, units int) (Booking, error) {
-	// this may want concurrency protection to avoid booking over capacity
 	if availability.Vacancies < units {
 		return Booking{}, pkg.NewBadRequestError(pkg.InvalidParam{
 			Name:   "units",
