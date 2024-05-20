@@ -3,7 +3,9 @@ package internal
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prathoss/hw/pkg"
+	"github.com/robfig/cron/v3"
 )
 
 const CapabilityPricing = "pricing"
@@ -24,18 +27,20 @@ func NewServer(config Config) (*Server, error) {
 		return nil, err
 	}
 	return &Server{
-		db:           pool,
-		config:       config,
-		productStore: NewProductRepository(pool),
-		pricingStore: NewPricingRepository(pool),
+		db:                pool,
+		config:            config,
+		productStore:      NewProductRepository(pool),
+		pricingStore:      NewPricingRepository(pool),
+		availabilityStore: NewAvailabilityRepository(pool),
 	}, nil
 }
 
 type Server struct {
-	db           *pgxpool.Pool
-	config       Config
-	productStore ProductStorer
-	pricingStore PricingStorer
+	db                *pgxpool.Pool
+	config            Config
+	productStore      ProductStorer
+	pricingStore      PricingStorer
+	availabilityStore AvailabilityStorer
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -67,7 +72,7 @@ func (s *Server) listProducts(_ http.ResponseWriter, r *http.Request) (any, erro
 		for _, product := range products {
 			productIDs = append(productIDs, product.ID)
 		}
-		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, "EUR")
+		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, getCurrency())
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +113,7 @@ func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, 
 	}
 
 	if capability == CapabilityPricing {
-		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), []uuid.UUID{product.ID}, "EUR")
+		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), []uuid.UUID{product.ID}, getCurrency())
 		if err != nil {
 			return nil, err
 		}
@@ -125,9 +130,81 @@ func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, 
 	return product, nil
 }
 
-func (s *Server) listAvailability(w http.ResponseWriter, r *http.Request) (any, error) {
-	// TODO: implement
-	panic("not implemented")
+func (s *Server) listAvailability(_ http.ResponseWriter, r *http.Request) (any, error) {
+	capability := getCapabilityHeader(r)
+	invalidParams := validateCapability(capability)
+	if len(invalidParams) > 0 {
+		return nil, pkg.NewBadRequestError(invalidParams...)
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	var rawMessage map[string]any
+	if err := json.Unmarshal(body, &rawMessage); err != nil {
+		return nil, pkg.NewBadRequestError(pkg.InvalidParam{
+			Name:   "Body",
+			Reason: err.Error(),
+		})
+	}
+	_, isRange := rawMessage["localDateStart"]
+
+	var availabilities []Availability
+	if isRange {
+		var request AvailabilityRangeRequest
+		if err := json.Unmarshal(body, &request); err != nil {
+			return nil, pkg.NewBadRequestError(pkg.InvalidParam{
+				Name:   "Body",
+				Reason: err.Error(),
+			})
+		}
+		availabilities, err = s.availabilityStore.GetAvailabilityTo(r.Context(), request.ProductId, time.Time(request.LocalDateStart).UTC(), time.Time(request.LocalDateEnd).UTC())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var request AvailabilityDayRequest
+		if err := json.Unmarshal(body, &request); err != nil {
+			return nil, pkg.NewBadRequestError(pkg.InvalidParam{
+				Name:   "Body",
+				Reason: err.Error(),
+			})
+		}
+		availabilities, err = s.availabilityStore.GetAvailability(r.Context(), request.ProductId, time.Time(request.LocalDate).UTC())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if capability == CapabilityPricing {
+		productIDsMap := map[uuid.UUID]struct{}{}
+		for _, availability := range availabilities {
+			productIDsMap[availability.ProductID] = struct{}{}
+		}
+		productIDs := make([]uuid.UUID, 0, len(productIDsMap))
+		for productID := range productIDsMap {
+			productIDs = append(productIDs, productID)
+		}
+		pricing, err := s.pricingStore.GetPricingByProductId(r.Context(), productIDs, getCurrency())
+		if err != nil {
+			return nil, err
+		}
+		pricedAvailabilities := make([]PricedAvailability, 0, len(availabilities))
+		for _, availability := range availabilities {
+			pricing, ok := pricing[availability.ProductID]
+			if !ok {
+				return nil, pkg.NewNotFoundError(fmt.Sprintf("could not find pricing for availability %s", availability.ID))
+			}
+			pricedAvailabilities = append(pricedAvailabilities, PricedAvailability{
+				Availability: availability,
+				Pricing:      pricing,
+			})
+		}
+		return pricedAvailabilities, nil
+	}
+
+	return availabilities, nil
 }
 
 func (s *Server) createBooking(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -143,6 +220,10 @@ func (s *Server) getBookingDetail(w http.ResponseWriter, r *http.Request) (any, 
 func (s *Server) confirmBooking(w http.ResponseWriter, r *http.Request) (any, error) {
 	// TODO: implement
 	panic("not implemented")
+}
+
+func getCurrency() string {
+	return "EUR"
 }
 
 func validateCapability(capability string) []pkg.InvalidParam {
@@ -218,5 +299,48 @@ func (s *Server) Run() error {
 		ErrorLog:          slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
 	}
 
+	c := cron.New()
+	_, err := c.AddFunc("@daily", s.CreateAvailabilities)
+	if err != nil {
+		return err
+	}
+	c.Start()
+
 	return pkg.ServeWithShutdown(server)
+}
+
+func (s *Server) CreateAvailabilities() {
+	ctx, cFunc := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cFunc()
+	products, err := s.productStore.ListProducts(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list products", pkg.Err(err))
+		return
+	}
+	// yes, n+1 but ok for this use case
+	for _, product := range products {
+		latestAvailability, err := s.availabilityStore.GetLatestAvailability(ctx, product.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to get latest availability", pkg.Err(err))
+			return
+		}
+		endDate := time.Now().UTC().AddDate(1, 0, 0).Truncate(24 * time.Hour)
+		startDate := time.Now().AddDate(0, 0, -1).UTC().Truncate(24 * time.Hour)
+		if latestAvailability != nil {
+			startDate = time.Time(latestAvailability.LocalDate)
+		}
+		daysDiff := int(endDate.Sub(startDate).Hours() / 24)
+		availabilities := make([]Availability, 0, daysDiff)
+		for i := range daysDiff {
+			availabilities = append(availabilities, Availability{
+				ID:        uuid.New(),
+				ProductID: product.ID,
+				LocalDate: JSONTime(startDate.AddDate(0, 0, i+1)),
+			})
+		}
+		if err := s.availabilityStore.InsertAvailabilities(ctx, availabilities); err != nil {
+			slog.ErrorContext(ctx, "failed to insert availabilities", pkg.Err(err))
+			return
+		}
+	}
 }

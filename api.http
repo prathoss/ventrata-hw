@@ -3,20 +3,23 @@ GET {{uri}}/api/v1/health
 
 ### List products
 GET {{uri}}/api/v1/products
+Capability: pricing
 
 ### Get Product by ID
 < {%
     request.variables.set("ID", "9D51D042-96B7-446B-B152-97D451D33933");
 %}
 GET {{uri}}/api/v1/products/{{ID}}
+Capability: pricing
 
 ### List availability
 < {%
     request.variables.set("productID", "9D51D042-96B7-446B-B152-97D451D33933");
-    request.variables.set("localDate", "2024-05-20")
+    request.variables.set("localDate", "2024-05-21")
 %}
 POST {{uri}}/api/v1/availability
 Content-Type: application/json
+Capability: pricing
 
 {
   "productId": "{{productID}}",
@@ -31,6 +34,7 @@ Content-Type: application/json
 %}
 POST {{uri}}/api/v1/availability
 Content-Type: application/json
+Capability: pricing
 
 {
   "productId": "{{productID}}",
