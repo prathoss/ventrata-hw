@@ -2,10 +2,12 @@ package internal
 
 import (
 	"context"
+	"log"
 	"net/url"
 	"path/filepath"
 	"time"
 
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/network"
@@ -13,6 +15,7 @@ import (
 )
 
 func setupPgAndMigrations() (string, func(), error) {
+	testcontainers.Logger = log.New(&ioutils.NopWriter{}, "", 0)
 	ctx := context.Background()
 	nw, err := network.New(ctx)
 	if err != nil {
@@ -36,13 +39,20 @@ func setupPgAndMigrations() (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	u, err := url.Parse(connString)
+
+	urlForTest, err := url.Parse(connString)
 	if err != nil {
 		return "", nil, err
 	}
-	u.Host = "pg"
-	u.User = url.UserPassword("ventrata_usr", "ventrata123")
-	u.Path = "ventrata"
+	urlForMigration, err := url.Parse(connString)
+	if err != nil {
+		return "", nil, err
+	}
+	urlForTest.User = url.UserPassword("ventrata_usr", "ventrata123")
+	urlForMigration.User = url.UserPassword("ventrata_usr", "ventrata123")
+	urlForTest.Path = "ventrata"
+	urlForMigration.Path = "ventrata"
+	urlForMigration.Host = "pg:5432"
 
 	migrationDirectory, err := filepath.Abs(filepath.Join("..", "migrations"))
 	if err != nil {
@@ -58,7 +68,7 @@ func setupPgAndMigrations() (string, func(), error) {
 					ContainerFilePath: "/migrations",
 				},
 			},
-			Cmd:      []string{"-path", "/migrations/", "-database", u.String(), "up"},
+			Cmd:      []string{"-path", "/migrations/", "-database", urlForMigration.String(), "up"},
 			Networks: []string{nw.Name},
 		},
 		Started: true,
@@ -66,8 +76,7 @@ func setupPgAndMigrations() (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	u.Host = "localhost"
-	return u.String(), func() {
+	return urlForTest.String(), func() {
 		_ = migrations.Terminate(ctx)
 		_ = pgContainer.Terminate(ctx)
 		_ = nw.Remove(ctx)
