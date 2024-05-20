@@ -15,3 +15,7 @@ Requirements:
 - Docker
 - [golangci-lint](https://golangci-lint.run/welcome/install/)
 - [migrate](https://github.com/golang-migrate/migrate)
+
+## Start
+
+To start project execute `docker compose up -d` in repository root.
