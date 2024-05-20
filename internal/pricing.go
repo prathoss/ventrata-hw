@@ -136,7 +136,10 @@ func (p *PricingRepository) GetPricedBookings(ctx context.Context, bookings []Bo
 		pricedBookings = append(pricedBookings, PricedBooking{
 			Units:   pricedUnits,
 			Booking: booking,
-			Pricing: pricing,
+			Pricing: Pricing{
+				Price:    pricing.Price * len(pricedUnits),
+				Currency: pricing.Currency,
+			},
 		})
 	}
 
