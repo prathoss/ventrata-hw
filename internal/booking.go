@@ -41,13 +41,13 @@ type Ticket struct {
 	Content   string
 }
 
-type BookingStorer interface {
+type BookingProcessor interface {
 	CreateBooking(ctx context.Context, availability Availability, units int) (Booking, error)
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (Booking, error)
 	ConfirmBooking(ctx context.Context, bookingID uuid.UUID) (Booking, error)
 }
 
-var _ BookingStorer = &BookingRepository{}
+var _ BookingProcessor = &BookingRepository{}
 
 func NewBookingRepository(pool *pgxpool.Pool) *BookingRepository {
 	return &BookingRepository{

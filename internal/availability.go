@@ -37,7 +37,7 @@ const (
 	AvailabilityStatusSoldOut   = "SOLD_OUT"
 )
 
-type AvailabilityStorer interface {
+type AvailabilityProcessor interface {
 	InsertAvailabilities(ctx context.Context, availabilities []Availability) error
 	GetAvailability(ctx context.Context, productID uuid.UUID, day time.Time) ([]Availability, error)
 	GetAvailabilityTo(ctx context.Context, productID uuid.UUID, from time.Time, to time.Time) ([]Availability, error)
@@ -45,7 +45,7 @@ type AvailabilityStorer interface {
 	GetLatestAvailability(ctx context.Context, productID uuid.UUID) (*Availability, error)
 }
 
-var _ AvailabilityStorer = &AvailabilityRepository{}
+var _ AvailabilityProcessor = &AvailabilityRepository{}
 
 func NewAvailabilityRepository(pool *pgxpool.Pool) *AvailabilityRepository {
 	return &AvailabilityRepository{

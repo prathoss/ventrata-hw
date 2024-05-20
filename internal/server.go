@@ -27,22 +27,22 @@ func NewServer(config Config) (*Server, error) {
 		return nil, err
 	}
 	return &Server{
-		db:                pool,
-		config:            config,
-		productStore:      NewProductRepository(pool),
-		pricingStore:      NewPricingRepository(pool),
-		availabilityStore: NewAvailabilityRepository(pool),
-		bookingStore:      NewBookingRepository(pool),
+		db:                    pool,
+		config:                config,
+		productProcessor:      NewProductRepository(pool),
+		pricingProcessor:      NewPricingRepository(pool),
+		availabilityProcessor: NewAvailabilityRepository(pool),
+		bookingProcessor:      NewBookingRepository(pool),
 	}, nil
 }
 
 type Server struct {
-	db                *pgxpool.Pool
-	config            Config
-	productStore      ProductStorer
-	pricingStore      PricingStorer
-	availabilityStore AvailabilityStorer
-	bookingStore      BookingStorer
+	db                    *pgxpool.Pool
+	config                Config
+	productProcessor      ProductProcessor
+	pricingProcessor      PricingProcessor
+	availabilityProcessor AvailabilityProcessor
+	bookingProcessor      BookingProcessor
 }
 
 func (s *Server) handleHealth(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -64,13 +64,13 @@ func (s *Server) listProducts(_ http.ResponseWriter, r *http.Request) (any, erro
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	products, err := s.productStore.ListProducts(r.Context())
+	products, err := s.productProcessor.ListProducts(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
 	if capability == CapabilityPricing {
-		return s.pricingStore.GetPricedProducts(r.Context(), products, getCurrency())
+		return s.pricingProcessor.GetPricedProducts(r.Context(), products, getCurrency())
 	}
 	return products, nil
 }
@@ -90,13 +90,13 @@ func (s *Server) getProductDetail(_ http.ResponseWriter, r *http.Request) (any, 
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	product, err := s.productStore.GetProduct(r.Context(), id)
+	product, err := s.productProcessor.GetProduct(r.Context(), id)
 	if err != nil {
 		return nil, err
 	}
 
 	if capability == CapabilityPricing {
-		pricedProducts, err := s.pricingStore.GetPricedProducts(r.Context(), []Product{product}, getCurrency())
+		pricedProducts, err := s.pricingProcessor.GetPricedProducts(r.Context(), []Product{product}, getCurrency())
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +134,7 @@ func (s *Server) listAvailability(_ http.ResponseWriter, r *http.Request) (any, 
 				Reason: err.Error(),
 			})
 		}
-		availabilities, err = s.availabilityStore.GetAvailabilityTo(r.Context(), request.ProductId, time.Time(request.LocalDateStart).UTC(), time.Time(request.LocalDateEnd).UTC())
+		availabilities, err = s.availabilityProcessor.GetAvailabilityTo(r.Context(), request.ProductId, time.Time(request.LocalDateStart).UTC(), time.Time(request.LocalDateEnd).UTC())
 		if err != nil {
 			return nil, err
 		}
@@ -146,14 +146,14 @@ func (s *Server) listAvailability(_ http.ResponseWriter, r *http.Request) (any, 
 				Reason: err.Error(),
 			})
 		}
-		availabilities, err = s.availabilityStore.GetAvailability(r.Context(), request.ProductId, time.Time(request.LocalDate).UTC())
+		availabilities, err = s.availabilityProcessor.GetAvailability(r.Context(), request.ProductId, time.Time(request.LocalDate).UTC())
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if capability == CapabilityPricing {
-		return s.pricingStore.GetPricedAvailabilities(r.Context(), availabilities, getCurrency())
+		return s.pricingProcessor.GetPricedAvailabilities(r.Context(), availabilities, getCurrency())
 	}
 
 	return availabilities, nil
@@ -179,7 +179,7 @@ func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, err
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	availability, err := s.availabilityStore.GetAvailabilityByID(r.Context(), bookingRequest.AvailabilityID)
+	availability, err := s.availabilityProcessor.GetAvailabilityByID(r.Context(), bookingRequest.AvailabilityID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, err
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	return s.bookingStore.CreateBooking(r.Context(), availability, bookingRequest.Units)
+	return s.bookingProcessor.CreateBooking(r.Context(), availability, bookingRequest.Units)
 }
 
 func (s *Server) getBookingDetail(_ http.ResponseWriter, r *http.Request) (any, error) {
@@ -212,13 +212,13 @@ func (s *Server) getBookingDetail(_ http.ResponseWriter, r *http.Request) (any, 
 		return nil, pkg.NewBadRequestError(invalidParams...)
 	}
 
-	booking, err := s.bookingStore.GetBooking(r.Context(), id)
+	booking, err := s.bookingProcessor.GetBooking(r.Context(), id)
 	if err != nil {
 		return nil, err
 	}
 
 	if capability == CapabilityPricing {
-		bookings, err := s.pricingStore.GetPricedBookings(r.Context(), []Booking{booking}, getCurrency())
+		bookings, err := s.pricingProcessor.GetPricedBookings(r.Context(), []Booking{booking}, getCurrency())
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (s *Server) confirmBooking(_ http.ResponseWriter, r *http.Request) (any, er
 		return nil, pkg.NewBadRequestError(validationErrors...)
 	}
 
-	return s.bookingStore.ConfirmBooking(r.Context(), id)
+	return s.bookingProcessor.ConfirmBooking(r.Context(), id)
 }
 
 func getCurrency() string {
@@ -334,14 +334,14 @@ func (s *Server) Run() error {
 func (s *Server) CreateAvailabilities() {
 	ctx, cFunc := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cFunc()
-	products, err := s.productStore.ListProducts(ctx)
+	products, err := s.productProcessor.ListProducts(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list products", pkg.Err(err))
 		return
 	}
 	// yes, n+1 but ok for this use case
 	for _, product := range products {
-		latestAvailability, err := s.availabilityStore.GetLatestAvailability(ctx, product.ID)
+		latestAvailability, err := s.availabilityProcessor.GetLatestAvailability(ctx, product.ID)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to get latest availability", pkg.Err(err))
 			return
@@ -360,7 +360,7 @@ func (s *Server) CreateAvailabilities() {
 				LocalDate: JSONTime(startDate.AddDate(0, 0, i+1)),
 			})
 		}
-		if err := s.availabilityStore.InsertAvailabilities(ctx, availabilities); err != nil {
+		if err := s.availabilityProcessor.InsertAvailabilities(ctx, availabilities); err != nil {
 			slog.ErrorContext(ctx, "failed to insert availabilities", pkg.Err(err))
 			return
 		}

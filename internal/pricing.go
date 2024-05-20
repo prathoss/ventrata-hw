@@ -35,13 +35,13 @@ type PricedBooking struct {
 	Pricing
 }
 
-type PricingStorer interface {
+type PricingProcessor interface {
 	GetPricedProducts(ctx context.Context, products []Product, currency string) ([]PricedProduct, error)
 	GetPricedAvailabilities(ctx context.Context, availabilities []Availability, currency string) ([]PricedAvailability, error)
 	GetPricedBookings(ctx context.Context, bookings []Booking, currency string) ([]PricedBooking, error)
 }
 
-var _ PricingStorer = &PricingRepository{}
+var _ PricingProcessor = &PricingRepository{}
 
 func NewPricingRepository(pool *pgxpool.Pool) *PricingRepository {
 	return &PricingRepository{

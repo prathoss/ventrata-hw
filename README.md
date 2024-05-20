@@ -6,8 +6,8 @@ from Ventrata interview process.
 Requirements:
 - [x] API implementation
 - [x] Error handling
-- [ ] Deployment
-- [ ] Testing
+- [x] Deployment
+- [x] Testing (Test are only very basic)
 
 ## Dependencies
 

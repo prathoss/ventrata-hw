@@ -16,12 +16,12 @@ type Product struct {
 	Capacity int `json:"capacity"`
 }
 
-type ProductStorer interface {
+type ProductProcessor interface {
 	GetProduct(ctx context.Context, id uuid.UUID) (Product, error)
 	ListProducts(ctx context.Context) ([]Product, error)
 }
 
-var _ ProductStorer = &ProductRepository{}
+var _ ProductProcessor = &ProductRepository{}
 
 func NewProductRepository(pool *pgxpool.Pool) *ProductRepository {
 	return &ProductRepository{
