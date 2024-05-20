@@ -16,6 +16,7 @@ RUN go build -o /build/app .
 FROM scratch as runner
 
 WORKDIR /app
+EXPOSE 8080
 HEALTHCHECK CMD /app/app health
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

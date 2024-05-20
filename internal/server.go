@@ -160,6 +160,8 @@ func (s *Server) listAvailability(_ http.ResponseWriter, r *http.Request) (any, 
 }
 
 func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, error) {
+	invalidParams := make([]pkg.InvalidParam, 0, 10)
+
 	var bookingRequest BookingRequest
 	if err := json.NewDecoder(r.Body).Decode(&bookingRequest); err != nil {
 		return nil, pkg.NewBadRequestError(pkg.InvalidParam{
@@ -167,11 +169,31 @@ func (s *Server) createBooking(_ http.ResponseWriter, r *http.Request) (any, err
 			Reason: err.Error(),
 		})
 	}
+	if bookingRequest.Units <= 0 {
+		invalidParams = append(invalidParams, pkg.InvalidParam{
+			Name:   "units",
+			Reason: "Must be greater than zero",
+		})
+	}
+	if len(invalidParams) > 0 {
+		return nil, pkg.NewBadRequestError(invalidParams...)
+	}
 
 	availability, err := s.availabilityStore.GetAvailabilityByID(r.Context(), bookingRequest.AvailabilityID)
 	if err != nil {
 		return nil, err
 	}
+
+	if availability.ProductID != bookingRequest.ProductID {
+		invalidParams = append(invalidParams, pkg.InvalidParam{
+			Name:   "productID",
+			Reason: "product availability mismatch",
+		})
+	}
+	if len(invalidParams) > 0 {
+		return nil, pkg.NewBadRequestError(invalidParams...)
+	}
+
 	return s.bookingStore.CreateBooking(r.Context(), availability, bookingRequest.Units)
 }
 

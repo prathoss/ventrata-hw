@@ -4,7 +4,7 @@ This repo is implementation of [homework](https://paper.dropbox.com/doc/Golang-T
 from Ventrata interview process.
 
 Requirements:
-- [ ] API implementation
+- [x] API implementation
 - [x] Error handling
 - [ ] Deployment
 - [ ] Testing
