@@ -19,3 +19,9 @@ Requirements:
 ## Start
 
 To start project execute `docker compose up -d` in repository root.
+
+## Deployment
+
+Project is running on `http://64.227.118.184`.
+
+To get API documentation use `http://64.227.118.184/api/v1/open-api`
